@@ -34,7 +34,8 @@ public abstract class MobAiMixin {
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/ai/goal/GoalSelector;tick()V",
             ordinal = 0
-        )
+        ),
+        require = 0
     )
     private void throttleGoalSelector(GoalSelector goalSelector) {
         Mob self = (Mob) (Object) this;
@@ -54,7 +55,8 @@ public abstract class MobAiMixin {
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/ai/goal/GoalSelector;tick()V",
             ordinal = 1
-        )
+        ),
+        require = 0
     )
     private void throttleTargetSelector(GoalSelector goalSelector) {
         if (!voidrp_skipAiThisTick) {

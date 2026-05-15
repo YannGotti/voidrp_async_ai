@@ -1,8 +1,10 @@
 modLoader="javafml"
-mixins=[{file="mixins.voidrp_async_ai.json"}]
 loaderVersion="${loader_version_range}"
 license="${mod_license}"
 issueTrackerURL="${mod_issue_tracker_url}"
+
+[[mixins]]
+config="mixins.voidrp_async_ai.json"
 
 [[mods]]
 modId="${mod_id}"

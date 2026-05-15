@@ -6,14 +6,12 @@
   "refmap": "mixins.voidrp_async_ai.refmap.json",
   "mixins": [
     "PathNavigationMixin",
-    "MobAiMixin",
-    "NavigationThrottleMixin",
     "EntityHibernateMixin",
     "BrainThrottleMixin",
     "NaturalSpawnMixin"
   ],
   "client": [],
   "injectors": {
-    "defaultRequire": 1
+    "defaultRequire": 0
   }
 }

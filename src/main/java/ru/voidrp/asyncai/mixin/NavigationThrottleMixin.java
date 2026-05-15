@@ -19,7 +19,7 @@ public abstract class NavigationThrottleMixin {
 
     @Shadow protected Mob mob;
 
-    @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "tick", at = @At("HEAD"), cancellable = true, require = 0)
     private void throttleNavTick(CallbackInfo ci) {
         if (EntityThrottle.shouldSkipNavigation(mob)) {
             ci.cancel();
