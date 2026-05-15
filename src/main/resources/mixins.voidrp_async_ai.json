@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "ru.voidrp.asyncai.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "mixins.voidrp_async_ai.refmap.json",
+  "mixins": [
+    "PathNavigationMixin",
+    "MobAiMixin",
+    "NavigationThrottleMixin",
+    "EntityHibernateMixin",
+    "BrainThrottleMixin",
+    "NaturalSpawnMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
