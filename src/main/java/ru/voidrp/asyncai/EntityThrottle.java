@@ -108,7 +108,11 @@ public final class EntityThrottle {
 
     /**
      * Returns true if PathNavigation.tick() should be skipped.
-     * Only activates beyond VFAR distance.
+     *
+     * Throttle schedule (distance from nearest player):
+     *   ≤ 64 blocks  — tick every frame (full responsiveness)
+     *   64–96 blocks — tick every 2 frames  (halves VoxelShape checks for mid-range mobs)
+     *   > 96 blocks  — tick every 4+ frames (adaptive)
      */
     public static boolean shouldSkipNavigation(Mob mob) {
         if (!AiConfig.NAV_THROTTLE_ENABLED.get()) return false;
@@ -116,12 +120,19 @@ public final class EntityThrottle {
         if (isBoss(mob)) return false;
 
         double distSq = getCachedDistSq(mob);
+        double far    = AiConfig.THROTTLE_FAR_DIST.get();
         double vfar   = AiConfig.THROTTLE_VFAR_DIST.get();
-        if (distSq <= vfar * vfar) return false;
+
+        if (distSq <= far * far) return false; // ≤64 blocks: always tick
+
+        double load = AdaptiveThrottle.getLoadFactor();
+        int mod = (distSq > vfar * vfar)
+            ? (int) Math.max(4, 4 * load)  // >96: every 4+ ticks
+            : (int) Math.max(2, 2 * load); // 64-96: every 2+ ticks
 
         UUID id = mob.getUUID();
         int[] counter = counters.computeIfAbsent(id, k -> new int[1]);
-        return (counter[0] % 4) != 0;
+        return (counter[0] % mod) != 0;
     }
 
     // -------------------------------------------------------------------------

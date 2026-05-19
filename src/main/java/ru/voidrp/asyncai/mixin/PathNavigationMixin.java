@@ -61,15 +61,17 @@ public abstract class PathNavigationMixin {
 
         var id = mob.getUUID();
 
-        // 1. Path cache hit (same target, computed recently for this mob)
+        // 1. Path cache hit (target within 3 blocks of cached target, still fresh)
         Path cached = PathCache.retrieve(id, targets);
         if (cached != null) return cached;
 
         // 2. Async result ready from a previous submission
         if (AsyncPathManager.hasResult(id)) return AsyncPathManager.pollResult(id);
 
-        // 3. Submit to worker; return null this tick so mob keeps current path
-        AsyncPathManager.submitAsync(id, pathFinder, region, mob, targets, maxRange, accuracy, multiplier);
+        // 3. Submit to worker; return null this tick so mob keeps current path.
+        //    Pass distSq so PathCache picks the right TTL for the result.
+        double distSq = AsyncPathManager.nearestPlayerDistSq(mob);
+        AsyncPathManager.submitAsync(id, pathFinder, region, mob, targets, maxRange, accuracy, multiplier, distSq);
         return null;
     }
 }

@@ -6,9 +6,20 @@
   "refmap": "mixins.voidrp_async_ai.refmap.json",
   "mixins": [
     "PathNavigationMixin",
+    "NavigationThrottleMixin",
     "EntityHibernateMixin",
+    "MobAiMixin",
     "BrainThrottleMixin",
-    "NaturalSpawnMixin"
+    "NaturalSpawnMixin",
+    "LineOfSightGuardMixin",
+    "ParallelPreTickMixin",
+    "EntityCollisionGuardMixin",
+    "BlockCollisionsChunkGuardMixin",
+    "PlayerTravelChunkGuardMixin",
+    "LivingEntityTravelGuardMixin",
+    "PostProcessFluidGuardMixin",
+    "PlayerDataSaveAsyncMixin",
+    "PlayerListRemoveMixin"
   ],
   "client": [],
   "injectors": {

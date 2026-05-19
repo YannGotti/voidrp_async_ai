@@ -19,6 +19,9 @@ public final class AiConfig {
     public static final ModConfigSpec.BooleanValue HIBERNATE_ENABLED;
     public static final ModConfigSpec.BooleanValue SPAWN_THROTTLE_ENABLED;
     public static final ModConfigSpec.BooleanValue ADAPTIVE_THROTTLE_ENABLED;
+    public static final ModConfigSpec.BooleanValue PARALLEL_LOS_ENABLED;
+    public static final ModConfigSpec.BooleanValue CHUNK_PRELOAD_ENABLED;
+    public static final ModConfigSpec.BooleanValue CHUNK_PRELOAD_MODDED_DIMS;
 
     // ---- Distance thresholds ----
     public static final ModConfigSpec.IntValue ASYNC_PATH_MIN_DIST;
@@ -63,6 +66,22 @@ public final class AiConfig {
         ADAPTIVE_THROTTLE_ENABLED = builder
             .comment("Automatically increase throttle ratios during TPS lag spikes")
             .define("adaptiveThrottleEnabled", true);
+
+        PARALLEL_LOS_ENABLED = builder
+            .comment("Pre-compute hasLineOfSight() in parallel before entity ticking (uses CPU/2 worker threads)")
+            .define("parallelLosEnabled", true);
+
+        CHUNK_PRELOAD_ENABLED = builder
+            .comment("Predictive chunk pre-loading: submits getChunkFuture(FULL) for chunks the player will enter " +
+                     "before the main thread needs them. Uses vanilla's own gen thread pool (all available cores). " +
+                     "Eliminates main-thread stalls when crossing chunk borders at speed.")
+            .define("chunkPreloadEnabled", true);
+
+        CHUNK_PRELOAD_MODDED_DIMS = builder
+            .comment("Allow chunk preloading in modded dimensions (Twilight Forest, Aether, etc.). " +
+                     "Disabled by default: tfthreadsafetyaddon presence indicates these dims had threading issues. " +
+                     "Enable only after verifying stability.")
+            .define("chunkPreloadModdedDimensions", false);
 
         builder.pop().push("distances");
 

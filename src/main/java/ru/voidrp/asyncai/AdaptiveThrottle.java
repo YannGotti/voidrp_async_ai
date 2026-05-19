@@ -103,10 +103,12 @@ public final class AdaptiveThrottle {
 
         if (avgMs < 40.0) {
             loadFactor = 1.0;
-        } else if (avgMs < 60.0) {
+        } else if (avgMs < 55.0) {
             loadFactor = 1.5;
-        } else if (avgMs < 100.0) {
+        } else if (avgMs < 75.0) {
             loadFactor = 2.0;
+        } else if (avgMs < 120.0) {
+            loadFactor = 2.5;
         } else {
             loadFactor = 3.0;
         }

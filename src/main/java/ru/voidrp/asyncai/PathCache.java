@@ -25,10 +25,11 @@ public final class PathCache {
     /** Maximum number of cached entries. Oldest evicted when exceeded. */
     private static final int MAX_ENTRIES = 512;
 
-    /** How long a cached path stays valid (milliseconds, ~20 ticks). */
-    private static final long TTL_MS = 1000L;
+    /** How long a cached path stays valid (milliseconds). */
+    private static final long TTL_MS_NEAR = 1000L;  // <64 blocks
+    private static final long TTL_MS_FAR  = 3000L;  // ≥64 blocks
 
-    private record Entry(List<Node> nodes, BlockPos target, boolean reached, long expiresAt) {}
+    private record Entry(List<Node> nodes, BlockPos target, boolean reached, long expiresAt, double distSq) {}
 
     private static final ConcurrentHashMap<UUID, Entry> cache = new ConcurrentHashMap<>();
 
@@ -39,8 +40,11 @@ public final class PathCache {
     /**
      * Store a computed path for this entity. Thread-safe — intended to be called
      * from the async worker thread immediately after path computation.
+     *
+     * @param distSq squared distance to nearest player at submission time
+     *               (used to pick a longer TTL for distant mobs)
      */
-    public static void store(UUID mobId, @Nullable Path path) {
+    public static void store(UUID mobId, @Nullable Path path, double distSq) {
         if (!AiConfig.PATH_CACHE_ENABLED.get()) return;
         if (path == null || path.getNodeCount() == 0) return;
 
@@ -49,11 +53,13 @@ public final class PathCache {
             nodes.add(path.getNode(i));
         }
 
+        long ttl = distSq >= 64.0 * 64.0 ? TTL_MS_FAR : TTL_MS_NEAR;
         cache.put(mobId, new Entry(
             List.copyOf(nodes),
             path.getTarget(),
             path.canReach(),
-            System.currentTimeMillis() + TTL_MS
+            System.currentTimeMillis() + ttl,
+            distSq
         ));
 
         if (cache.size() > MAX_ENTRIES) evict();
@@ -62,6 +68,11 @@ public final class PathCache {
     /**
      * Attempt to retrieve a valid cached path for this entity targeting any of the
      * given positions. Returns null on cache miss or expiry.
+     *
+     * Uses proximity matching: if the new target is within 3 blocks (X/Z) and 2
+     * blocks (Y) of the cached target, the cached path is reused without recomputing.
+     * This avoids recomputing paths every tick when targets (chased entities) move
+     * slightly — the primary cause of repeated VoxelShape/block-state reads.
      *
      * Always returns a fresh Path instance with independent mutable state.
      * Call from main thread only.
@@ -78,10 +89,24 @@ public final class PathCache {
             return null;
         }
 
-        if (!targets.contains(entry.target())) return null;
+        if (!targetNearby(entry.target(), targets)) return null;
 
         // New Path wrapper so each mob has independent nextNodeIndex
         return new Path(new ArrayList<>(entry.nodes()), entry.target(), entry.reached());
+    }
+
+    /**
+     * Returns true if any of the requested targets is within 3 blocks (X/Z)
+     * and 2 blocks (Y) of the cached target position.
+     */
+    private static boolean targetNearby(BlockPos cached, Set<BlockPos> targets) {
+        if (targets.contains(cached)) return true;
+        for (BlockPos t : targets) {
+            if (Math.abs(t.getX() - cached.getX()) <= 3
+             && Math.abs(t.getY() - cached.getY()) <= 2
+             && Math.abs(t.getZ() - cached.getZ()) <= 3) return true;
+        }
+        return false;
     }
 
     /** Remove entries for entities that no longer exist. */

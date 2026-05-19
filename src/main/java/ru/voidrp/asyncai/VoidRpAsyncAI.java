@@ -11,6 +11,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -40,12 +41,15 @@ public final class VoidRpAsyncAI {
         NeoForge.EVENT_BUS.addListener(VoidRpAsyncAI::onServerStarted);
         NeoForge.EVENT_BUS.addListener(VoidRpAsyncAI::onServerStopping);
         NeoForge.EVENT_BUS.addListener(VoidRpAsyncAI::onRegisterCommands);
+        NeoForge.EVENT_BUS.addListener(VoidRpAsyncAI::onPlayerLogout);
     }
 
     private static void onServerStarted(ServerStartedEvent event) {
+        ParallelLosManager.init();
+        ChunkPreloadManager.init();
         LOGGER.info(
             "[VoidRP Async AI] loaded — {} pathfinder threads | " +
-            "async={} cache={} dabs={} brain={} nav={} hibernate={} spawn={} adaptive={}",
+            "async={} cache={} dabs={} brain={} nav={} hibernate={} spawn={} adaptive={} parallelLos={} chunkPreload={}",
             AsyncPathManager.getThreadCount(),
             AiConfig.ASYNC_PATH_ENABLED.get(),
             AiConfig.PATH_CACHE_ENABLED.get(),
@@ -54,23 +58,33 @@ public final class VoidRpAsyncAI {
             AiConfig.NAV_THROTTLE_ENABLED.get(),
             AiConfig.HIBERNATE_ENABLED.get(),
             AiConfig.SPAWN_THROTTLE_ENABLED.get(),
-            AiConfig.ADAPTIVE_THROTTLE_ENABLED.get()
+            AiConfig.ADAPTIVE_THROTTLE_ENABLED.get(),
+            AiConfig.PARALLEL_LOS_ENABLED.get(),
+            AiConfig.CHUNK_PRELOAD_ENABLED.get()
         );
     }
 
     private static void onServerStopping(ServerStoppingEvent event) {
         AsyncPathManager.shutdown();
+        ParallelLosManager.shutdown();
+        ChunkPreloadManager.shutdown();
         AdaptiveThrottle.reset();
-        LOGGER.info("[VoidRP Async AI] thread pool shut down");
+        PlayerSaveWorker.awaitAndShutdown();
+        LOGGER.info("[VoidRP Async AI] thread pools shut down");
     }
 
     private static void onServerTickPre(ServerTickEvent.Pre event) {
         AdaptiveThrottle.onTickStart();
     }
 
+    private static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        ChunkPreloadManager.onPlayerLeave(event.getEntity().getUUID());
+    }
+
     private static void onServerTick(ServerTickEvent.Post event) {
         AdaptiveThrottle.onTickEnd();
         tickCounter++;
+        ChunkPreloadManager.onTick(event.getServer());
 
         MinecraftServer server = event.getServer();
 
@@ -78,6 +92,9 @@ public final class VoidRpAsyncAI {
             List<Mob> allMobs = collectAllMobs(server);
             EntityThrottle.cleanup(allMobs);
             PathCache.cleanup(allMobs);
+            // Evict stale LOS cache entries (once per ~10 sec is enough)
+            long gameTime = server.overworld().getGameTime();
+            LineOfSightCache.evictStale(gameTime);
         }
 
         if (tickCounter % STATS_LOG_INTERVAL == 0) {
@@ -116,7 +133,9 @@ public final class VoidRpAsyncAI {
                             AiConfig.THROTTLE_NEAR_DIST.get() + "/" +
                             AiConfig.THROTTLE_FAR_DIST.get() + "/" +
                             AiConfig.THROTTLE_VFAR_DIST.get() + " blocks" +
-                        "\n  Hibernate dist     : " + AiConfig.HIBERNATE_DIST.get() + " blocks"
+                        "\n  Hibernate dist     : " + AiConfig.HIBERNATE_DIST.get() + " blocks" +
+                        "\n  Chunk preload      : in-flight=" + ChunkPreloadManager.getInFlightCount() +
+                            " pending=" + ChunkPreloadManager.getPendingCount()
                     ), false);
                     return Command.SINGLE_SUCCESS;
                 }))

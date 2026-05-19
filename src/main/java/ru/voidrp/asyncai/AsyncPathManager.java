@@ -37,10 +37,11 @@ public final class AsyncPathManager {
 
     /**
      * Suppress re-submission spam: same entity can submit at most once per cooldown.
-     * 50 ms ≈ 1 tick.
+     * 200 ms ≈ 4 ticks — gives the PathCache a chance to serve the next few queries
+     * from cache before a new async job is started.
      */
     private static final ConcurrentHashMap<UUID, Long> lastSubmitMs = new ConcurrentHashMap<>();
-    private static final long SUBMIT_COOLDOWN_MS = 50L;
+    private static final long SUBMIT_COOLDOWN_MS = 200L;
 
     // -------------------------------------------------------------------------
     // Public API
@@ -67,6 +68,8 @@ public final class AsyncPathManager {
     /**
      * Submit a path computation to the worker pool.
      *
+     * @param distSq squared distance to nearest player — passed through to PathCache
+     *               so it can choose an appropriate TTL for the computed path
      * @return true  → submitted (or already in-flight); caller should return null this tick
      *         false → result ready — caller should call {@link #pollResult(UUID)}
      */
@@ -78,7 +81,8 @@ public final class AsyncPathManager {
         Set<BlockPos> targets,
         float maxRange,
         int accuracy,
-        float multiplier
+        float multiplier,
+        double distSq
     ) {
         // Result already ready from previous submission
         if (pendingResults.containsKey(entityId)) return false;
@@ -97,7 +101,7 @@ public final class AsyncPathManager {
         EXECUTOR.submit(() -> {
             try {
                 Path result = pathFinder.findPath(region, mob, targets, maxRange, accuracy, multiplier);
-                PathCache.store(entityId, result); // cache for repeated queries
+                PathCache.store(entityId, result, distSq);
                 pendingResults.put(entityId, Optional.ofNullable(result));
             } catch (Exception e) {
                 pendingResults.put(entityId, Optional.empty());
@@ -129,6 +133,18 @@ public final class AsyncPathManager {
         pendingResults.clear();
         inFlight.clear();
         lastSubmitMs.clear();
+    }
+
+    /** Squared distance to the nearest player, or MAX_VALUE if no players present. */
+    public static double nearestPlayerDistSq(Mob mob) {
+        var players = mob.level().players();
+        if (players.isEmpty()) return Double.MAX_VALUE;
+        double min = Double.MAX_VALUE;
+        for (var p : players) {
+            double d = mob.distanceToSqr(p);
+            if (d < min) min = d;
+        }
+        return min;
     }
 
     public static int getThreadCount()   { return THREAD_COUNT; }
