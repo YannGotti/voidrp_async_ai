@@ -11,6 +11,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import ru.voidrp.asyncai.ChunkWarnRateLimit;
 import ru.voidrp.asyncai.VoidRpAsyncAI;
 
 /**
@@ -42,10 +43,20 @@ public abstract class LivingEntityTravelGuardMixin {
             int cz = pos.getZ() >> 4;
             LevelChunk chunk = cache.getChunkNow(cx, cz);
             if (chunk == null) {
-                VoidRpAsyncAI.LOGGER.warn(
-                    "[VoidRP] travel() getBlockState guard — chunk [{},{}] not loaded " +
-                    "at block pos {},{},{} — returning AIR (friction=default) to prevent deadlock",
-                    cx, cz, pos.getX(), pos.getY(), pos.getZ());
+                long suppressed = ChunkWarnRateLimit.acquire(cx, cz);
+                if (suppressed >= 0) {
+                    if (suppressed > 0) {
+                        VoidRpAsyncAI.LOGGER.warn(
+                            "[VoidRP] travel() getBlockState guard — chunk [{},{}] not loaded " +
+                            "at block pos {},{},{} — returning AIR (friction=default) to prevent deadlock (+{} suppressed)",
+                            cx, cz, pos.getX(), pos.getY(), pos.getZ(), suppressed);
+                    } else {
+                        VoidRpAsyncAI.LOGGER.warn(
+                            "[VoidRP] travel() getBlockState guard — chunk [{},{}] not loaded " +
+                            "at block pos {},{},{} — returning AIR (friction=default) to prevent deadlock",
+                            cx, cz, pos.getX(), pos.getY(), pos.getZ());
+                    }
+                }
                 return Blocks.AIR.defaultBlockState();
             }
             return chunk.getBlockState(pos);

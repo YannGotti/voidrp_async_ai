@@ -46,14 +46,14 @@ public final class EntityThrottle {
      * {@code throttleGoalSelector} in MobAiMixin).
      */
     public static boolean shouldSkipGoals(Mob mob) {
-        if (!AiConfig.DABS_ENABLED.get()) return false;
+        if (!ConfigCache.DABS_ENABLED) return false;
         if (mob.level().isClientSide()) return false;
         if (isBoss(mob)) return false;
 
         double distSq = getCachedDistSq(mob);
-        double near   = AiConfig.THROTTLE_NEAR_DIST.get();
-        double far    = AiConfig.THROTTLE_FAR_DIST.get();
-        double vfar   = AiConfig.THROTTLE_VFAR_DIST.get();
+        double near   = ConfigCache.THROTTLE_NEAR_DIST;
+        double far    = ConfigCache.THROTTLE_FAR_DIST;
+        double vfar   = ConfigCache.THROTTLE_VFAR_DIST;
 
         double load   = AdaptiveThrottle.getLoadFactor();
         double typeX  = isPassive(mob) ? 1.5 : 1.0;
@@ -82,9 +82,9 @@ public final class EntityThrottle {
      */
     public static boolean shouldSkipBrainSensors(Mob mob) {
         double distSq = getCachedDistSq(mob);
-        double near   = AiConfig.THROTTLE_NEAR_DIST.get();
-        double far    = AiConfig.THROTTLE_FAR_DIST.get();
-        double vfar   = AiConfig.THROTTLE_VFAR_DIST.get();
+        double near   = ConfigCache.THROTTLE_NEAR_DIST;
+        double far    = ConfigCache.THROTTLE_FAR_DIST;
+        double vfar   = ConfigCache.THROTTLE_VFAR_DIST;
 
         double load = AdaptiveThrottle.getLoadFactor();
 
@@ -115,13 +115,13 @@ public final class EntityThrottle {
      *   > 96 blocks  — tick every 4+ frames (adaptive)
      */
     public static boolean shouldSkipNavigation(Mob mob) {
-        if (!AiConfig.NAV_THROTTLE_ENABLED.get()) return false;
+        if (!ConfigCache.NAV_THROTTLE_ENABLED) return false;
         if (mob.level().isClientSide()) return false;
         if (isBoss(mob)) return false;
 
         double distSq = getCachedDistSq(mob);
-        double far    = AiConfig.THROTTLE_FAR_DIST.get();
-        double vfar   = AiConfig.THROTTLE_VFAR_DIST.get();
+        double far    = ConfigCache.THROTTLE_FAR_DIST;
+        double vfar   = ConfigCache.THROTTLE_VFAR_DIST;
 
         if (distSq <= far * far) return false; // ≤64 blocks: always tick
 
@@ -144,12 +144,12 @@ public final class EntityThrottle {
      * Threshold: {@link AiConfig#HIBERNATE_DIST}.
      */
     public static boolean shouldHibernate(Mob mob) {
-        if (!AiConfig.HIBERNATE_ENABLED.get()) return false;
+        if (!ConfigCache.HIBERNATE_ENABLED) return false;
         if (mob.level().isClientSide()) return false;
         if (isBoss(mob)) return false;
 
-        double distSq   = getCachedDistSq(mob);
-        double hibDist  = AiConfig.HIBERNATE_DIST.get();
+        double distSq  = getCachedDistSq(mob);
+        double hibDist = ConfigCache.HIBERNATE_DIST;
         return distSq > hibDist * hibDist;
     }
 

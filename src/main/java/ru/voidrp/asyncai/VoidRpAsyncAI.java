@@ -45,6 +45,7 @@ public final class VoidRpAsyncAI {
     }
 
     private static void onServerStarted(ServerStartedEvent event) {
+        ConfigCache.refresh();
         ParallelLosManager.init();
         ChunkPreloadManager.init();
         LOGGER.info(
@@ -84,6 +85,7 @@ public final class VoidRpAsyncAI {
     private static void onServerTick(ServerTickEvent.Post event) {
         AdaptiveThrottle.onTickEnd();
         tickCounter++;
+        if (tickCounter % 20 == 0) ConfigCache.refresh();
         ChunkPreloadManager.onTick(event.getServer());
 
         MinecraftServer server = event.getServer();

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import ru.voidrp.asyncai.AiConfig;
+import ru.voidrp.asyncai.ConfigCache;
 
 /**
  * Throttles natural mob spawning for chunks far from any player.
@@ -45,14 +45,14 @@ public abstract class NaturalSpawnMixin {
             boolean spawnEnemies,
             boolean spawningOtherMobs,
             CallbackInfo ci) {
-        if (!AiConfig.SPAWN_THROTTLE_ENABLED.get()) return;
+        if (!ConfigCache.SPAWN_THROTTLE_ENABLED) return;
 
         var chunkPos = chunk.getPos();
         double minDistSq = nearestPlayerDistSq(level,
             chunkPos.getMiddleBlockX(), chunkPos.getMiddleBlockZ());
 
-        double vfar     = AiConfig.THROTTLE_VFAR_DIST.get();
-        double hibernate = AiConfig.HIBERNATE_DIST.get();
+        double vfar      = ConfigCache.THROTTLE_VFAR_DIST;
+        double hibernate = ConfigCache.HIBERNATE_DIST;
 
         int skipMod;
         if      (minDistSq > hibernate * hibernate) skipMod = 8;

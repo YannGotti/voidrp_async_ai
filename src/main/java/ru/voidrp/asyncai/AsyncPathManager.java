@@ -53,9 +53,9 @@ public final class AsyncPathManager {
      * movement feels immediate and responsive.
      */
     public static boolean shouldAsync(Mob mob) {
-        if (!AiConfig.ASYNC_PATH_ENABLED.get()) return false;
+        if (!ConfigCache.ASYNC_PATH_ENABLED) return false;
         if (mob.level().isClientSide()) return false;
-        double minDist   = AiConfig.ASYNC_PATH_MIN_DIST.get();
+        double minDist = ConfigCache.ASYNC_PATH_MIN_DIST;
         double minDistSq = minDist * minDist;
         var players = mob.level().players();
         if (players.isEmpty()) return true;

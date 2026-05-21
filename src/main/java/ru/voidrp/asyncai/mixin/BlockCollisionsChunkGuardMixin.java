@@ -9,6 +9,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import ru.voidrp.asyncai.ChunkWarnRateLimit;
 import ru.voidrp.asyncai.VoidRpAsyncAI;
 
 /**
@@ -47,10 +48,20 @@ public abstract class BlockCollisionsChunkGuardMixin<T> {
             ServerChunkCache cache = serverLevel.getChunkSource();
             LevelChunk chunk = cache.getChunkNow(cx, cz);
             if (chunk == null) {
-                VoidRpAsyncAI.LOGGER.warn(
-                    "[VoidRP] BlockCollisions chunk guard — chunk [{},{}] not immediately available, " +
-                    "skipping collision shapes to prevent main-thread deadlock",
-                    cx, cz);
+                long suppressed = ChunkWarnRateLimit.acquire(cx, cz);
+                if (suppressed >= 0) {
+                    if (suppressed > 0) {
+                        VoidRpAsyncAI.LOGGER.warn(
+                            "[VoidRP] BlockCollisions chunk guard — chunk [{},{}] not immediately available, " +
+                            "skipping collision shapes to prevent main-thread deadlock (+{} suppressed)",
+                            cx, cz, suppressed);
+                    } else {
+                        VoidRpAsyncAI.LOGGER.warn(
+                            "[VoidRP] BlockCollisions chunk guard — chunk [{},{}] not immediately available, " +
+                            "skipping collision shapes to prevent main-thread deadlock",
+                            cx, cz);
+                    }
+                }
                 return null; // computeNext() null-checks this and skips safely
             }
             return chunk;

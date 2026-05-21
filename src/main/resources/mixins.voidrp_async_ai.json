@@ -19,7 +19,10 @@
     "LivingEntityTravelGuardMixin",
     "PostProcessFluidGuardMixin",
     "PlayerDataSaveAsyncMixin",
-    "PlayerListRemoveMixin"
+    "PlayerListRemoveMixin",
+    "MahouChunkGuardMixin",
+    "IEWireCollisionsMixin",
+    "DeferredHolderValueMixin"
   ],
   "client": [],
   "injectors": {

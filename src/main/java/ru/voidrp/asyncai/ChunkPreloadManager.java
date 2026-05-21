@@ -97,7 +97,7 @@ public final class ChunkPreloadManager {
     // -------------------------------------------------------------------------
 
     public static void onTick(MinecraftServer server) {
-        if (!AiConfig.CHUNK_PRELOAD_ENABLED.get()) return;
+        if (!ConfigCache.CHUNK_PRELOAD_ENABLED) return;
 
         drainCompleted();
 
@@ -240,7 +240,7 @@ public final class ChunkPreloadManager {
 
     private static boolean isSafeToPreload(ServerLevel level) {
         if (SAFE_DIMENSIONS.contains(level.dimension())) return true;
-        return AiConfig.CHUNK_PRELOAD_MODDED_DIMS.get();
+        return ConfigCache.CHUNK_PRELOAD_MODDED_DIMS;
     }
 
     public static int getInFlightCount() { return inFlight.size(); }

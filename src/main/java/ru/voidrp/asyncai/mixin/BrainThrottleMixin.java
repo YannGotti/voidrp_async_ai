@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import ru.voidrp.asyncai.AiConfig;
+import ru.voidrp.asyncai.ConfigCache;
 import ru.voidrp.asyncai.EntityThrottle;
 
 /**
@@ -40,7 +40,7 @@ public abstract class BrainThrottleMixin {
         require = 0
     )
     private void voidrp_throttleSensors(ServerLevel level, LivingEntity owner, CallbackInfo ci) {
-        if (!AiConfig.BRAIN_THROTTLE_ENABLED.get()) return;
+        if (!ConfigCache.BRAIN_THROTTLE_ENABLED) return;
         if (!(owner instanceof Mob mob)) return;
         if (mob.level().isClientSide()) return;
         if (EntityThrottle.isBoss(mob)) return;
