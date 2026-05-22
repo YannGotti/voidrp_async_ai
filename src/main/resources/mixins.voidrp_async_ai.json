@@ -23,7 +23,10 @@
     "MahouChunkGuardMixin",
     "IEWireCollisionsMixin",
     "DeferredHolderValueMixin",
-    "InvWrapperNullGuardMixin"
+    "InvWrapperNullGuardMixin",
+    "QuarkInventoryTransferGuardMixin",
+    "QuarkSortGuardMixin",
+    "SophisticatedCoreTransferGuardMixin"
   ],
   "client": [],
   "injectors": {
