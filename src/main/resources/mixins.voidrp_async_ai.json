@@ -22,7 +22,8 @@
     "PlayerListRemoveMixin",
     "MahouChunkGuardMixin",
     "IEWireCollisionsMixin",
-    "DeferredHolderValueMixin"
+    "DeferredHolderValueMixin",
+    "InvWrapperNullGuardMixin"
   ],
   "client": [],
   "injectors": {
