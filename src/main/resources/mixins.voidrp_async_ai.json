@@ -26,7 +26,9 @@
     "InvWrapperNullGuardMixin",
     "QuarkInventoryTransferGuardMixin",
     "QuarkSortGuardMixin",
-    "SophisticatedCoreTransferGuardMixin"
+    "SophisticatedCoreTransferGuardMixin",
+    "DragonFightSpamGuardMixin",
+    "CitizensChunkUnloadGuardMixin"
   ],
   "client": [],
   "injectors": {
