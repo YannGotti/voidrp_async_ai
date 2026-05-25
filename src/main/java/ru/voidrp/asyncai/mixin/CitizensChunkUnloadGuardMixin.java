@@ -95,9 +95,12 @@ public abstract class CitizensChunkUnloadGuardMixin {
                 method.invoke(self);
             } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable cause = e.getCause();
+                String msg = cause != null ? cause.getMessage() : e.getMessage();
+                // Citizens rejects async event invocation — this is expected; suppress the noise.
+                if (msg != null && msg.contains("may only be triggered synchronously")) return;
                 VoidRpAsyncAI.LOGGER.warn(
                         "[VoidRP] CitizensChunkUnloadGuard — exception in unloadCallback chunk [{},{}]: {}",
-                        cx, cz, cause != null ? cause.getMessage() : e.getMessage());
+                        cx, cz, msg);
             } catch (Exception e) {
                 VoidRpAsyncAI.LOGGER.warn(
                         "[VoidRP] CitizensChunkUnloadGuard — reflection error for chunk [{},{}]: {}",

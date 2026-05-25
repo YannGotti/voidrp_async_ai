@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import ru.voidrp.asyncai.DisconnectContext;
 import ru.voidrp.asyncai.PlayerSaveWorker;
 import ru.voidrp.asyncai.VoidRpAsyncAI;
 
@@ -24,20 +23,21 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * Fixes a race condition in async player save:
+ * Offloads player data saves (NbtIo.writeCompressed + safeReplaceFile) from the server
+ * thread to a background I/O worker to prevent watchdog hangs when the kernel write()
+ * syscall blocks under page-cache / swap pressure.
  *
  * Vanilla PlayerDataStorage.save() sequence:
  *   1. Build CompoundTag
  *   2. Create temp file
- *   3. NbtIo.writeCompressed(tag, tempFile)   <-- was intercepted, submitted async
- *   4. Util.safeReplaceFile(playerFile, tempFile, backupFile)  <-- ran immediately with empty tempFile
+ *   3. NbtIo.writeCompressed(tag, tempFile)   <-- redirected: serialize to byte[] in-memory
+ *   4. Util.safeReplaceFile(playerFile, tempFile, backupFile)  <-- redirected: submit async task
  *
- * The old mixin intercepted step 3 and submitted the write asynchronously, but vanilla
- * immediately ran step 4, renaming the still-empty tempFile to playerFile. Result: empty save.
+ * The main thread only pays for in-memory GZIP serialization (fast, CPU-bound).
+ * The actual disk write + atomic rename runs on the background worker thread.
  *
- * Fix: intercept BOTH step 3 and step 4. Serialize the tag to an in-memory byte[] on the
- * main thread (fast, CPU-bound), then submit (disk-write + atomic-rename) as a single
- * background task — so the rename only happens after the write completes.
+ * Ordering: PlayerListRemoveMixin calls awaitPendingForPlayer() at the start of remove(),
+ * so the disconnect save is always submitted after any in-flight autosave completes.
  */
 @Mixin(PlayerDataStorage.class)
 public abstract class PlayerDataSaveAsyncMixin {
@@ -60,10 +60,8 @@ public abstract class PlayerDataSaveAsyncMixin {
         require = 0
     )
     private void voidrp_captureWrite(CompoundTag tag, Path tempPath) throws IOException {
-        if (PlayerSaveWorker.isShutdown() || DisconnectContext.isDisconnecting()) {
-            // Shutdown and disconnect saves are always synchronous:
-            // - Shutdown: background thread may not run before process exit.
-            // - Disconnect: player must be saved before their entity is removed.
+        if (PlayerSaveWorker.isShutdown()) {
+            // Shutdown saves are synchronous: background thread may not run before process exit.
             NbtIo.writeCompressed(tag, tempPath);
             return;
         }

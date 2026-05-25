@@ -20,13 +20,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   - by Path   — for deduplication (newer save cancels older pending save for same file)
  *   - by UUID   — for per-player await during disconnect (PlayerListRemoveMixin)
  *
- * Disconnect flow (PlayerListRemoveMixin):
+ * Disconnect ordering (PlayerListRemoveMixin):
  *   1. awaitPendingForPlayer(uuid) — wait for any in-flight autosave to finish
- *   2. DisconnectContext.set(true)  — signal mixin to write synchronously
- *   3. PlayerDataStorage.save()    — writes synchronously (bypasses this worker)
- *   4. DisconnectContext.set(false)
+ *   2. PlayerDataStorage.save() — serializes to byte[] on main thread, submits async task
  *
- * This guarantees the disconnect save always goes to disk as the last write for that player.
+ * This guarantees the disconnect save is always the last queued write for that player.
  */
 public final class PlayerSaveWorker {
 
