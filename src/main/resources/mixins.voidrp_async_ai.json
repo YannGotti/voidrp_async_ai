@@ -28,7 +28,14 @@
     "QuarkSortGuardMixin",
     "SophisticatedCoreTransferGuardMixin",
     "DragonFightSpamGuardMixin",
-    "CitizensChunkUnloadGuardMixin"
+    "CitizensChunkUnloadGuardMixin",
+    "ServerChunkCacheGetChunkGuardMixin",
+    "StructureManagerChunkGuardMixin",
+    "AetherPortalChunkGuardMixin",
+    "SprintParticleChunkGuardMixin",
+    "LevelFluidStateGuardMixin",
+    "CraftWorldGetChunkMixin",
+    "PlayerCommandTrackerMixin"
   ],
   "client": [],
   "injectors": {

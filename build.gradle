@@ -38,6 +38,7 @@ dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
     compileOnly files('../minecraft_server/mods/mahoutsukai-1.21.1-v1.36.8.jar')
     compileOnly files('../minecraft_server/mods/ImmersiveEngineering-1.21.1-12.4.2-194.jar')
+    compileOnly files('../minecraft_server/mods/aether-1.21.1-1.5.10-neoforge.jar')
 }
 
 tasks.withType(ProcessResources).configureEach {

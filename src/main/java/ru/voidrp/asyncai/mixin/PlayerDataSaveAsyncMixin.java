@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import ru.voidrp.asyncai.PendingSave;
 import ru.voidrp.asyncai.PlayerSaveWorker;
 import ru.voidrp.asyncai.VoidRpAsyncAI;
 
@@ -149,6 +150,4 @@ public abstract class PlayerDataSaveAsyncMixin {
         }
     }
 
-    @Unique
-    private record PendingSave(byte[] bytes, Path tempPath) {}
 }
