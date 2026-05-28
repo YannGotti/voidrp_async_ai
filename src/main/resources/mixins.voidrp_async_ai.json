@@ -40,7 +40,8 @@
     "TeleportInterceptMixin",
     "FindRespawnChunkGuardMixin",
     "AccessoriesSlotNullGuardMixin",
-    "LeafcutterAntForageChunkGuardMixin"
+    "LeafcutterAntForageChunkGuardMixin",
+    "OfflineProfileLookupGuardMixin"
   ],
   "client": [],
   "injectors": {
