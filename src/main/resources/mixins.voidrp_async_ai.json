@@ -35,7 +35,12 @@
     "SprintParticleChunkGuardMixin",
     "LevelFluidStateGuardMixin",
     "CraftWorldGetChunkMixin",
-    "PlayerCommandTrackerMixin"
+    "PlayerCommandTrackerMixin",
+    "SetPosRawChunkGuardMixin",
+    "TeleportInterceptMixin",
+    "FindRespawnChunkGuardMixin",
+    "AccessoriesSlotNullGuardMixin",
+    "LeafcutterAntForageChunkGuardMixin"
   ],
   "client": [],
   "injectors": {

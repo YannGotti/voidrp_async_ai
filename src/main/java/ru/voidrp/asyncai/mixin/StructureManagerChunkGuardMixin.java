@@ -2,6 +2,7 @@ package ru.voidrp.asyncai.mixin;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
@@ -12,6 +13,7 @@ import ru.voidrp.asyncai.VoidRpAsyncAI;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * Guards StructureManager structure lookups against crash during chunk decoration.
@@ -19,11 +21,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * Root cause #1 (2026-05-26 12:37): ValkyrieQueen.finalizeSpawn() → getStructureAt
  * Root cause #2 (2026-05-27 12:00): wetland_whimsy$WitchSetPersistance + FriendsAndFoes
  *   IllusionerEntity.finalizeSpawn() → Raider.finalizeSpawn
- *   → getStructureWithPieceAt(BlockPos,Structure)  ← 2-arg, no SectionPos overload
+ *   → getStructureWithPieceAt(BlockPos,Structure) ← 2-arg, guarded below
  *   → startsForStructure(SectionPos,Structure) → Level.getChunk → IllegalStateException
  *
- * NOTE: There is NO (BlockPos,SectionPos,Structure) overload in StructureManager.
- *       The 2-arg getStructureWithPieceAt(BlockPos,Structure) directly calls startsForStructure.
+ * Root cause #3 (2026-05-27 19:01): Cat.finalizeSpawn() on Worker-Main chunk gen thread
+ *   → getStructureWithPieceAt(BlockPos,TagKey)
+ *   → getStructureWithPieceAt(BlockPos,Predicate)   ← different overload, NOT guarded before
+ *   → startsForStructure(ChunkPos,Predicate) → ServerLevel.getChunk → ServerChunkCache.getChunk
+ *   → our ServerChunkCacheGetChunkGuardMixin returns null
+ *   → Level.getChunk line 400 throws on null → crash
+ *   Fix: guard startsForStructure(ChunkPos,Predicate) inside getStructureWithPieceAt(BlockPos,Predicate).
  */
 @Mixin(StructureManager.class)
 public abstract class StructureManagerChunkGuardMixin {
@@ -80,6 +87,33 @@ public abstract class StructureManagerChunkGuardMixin {
                     "[VoidRP] StructureManager chunk guard (getStructureWithPieceAt) — lookup failed at" +
                     " section [{},{}] during chunk decoration ({}), skipping",
                     sectionPos.x(), sectionPos.z(), e.getMessage());
+            }
+            return List.of();
+        }
+    }
+
+    // Root cause #3: getStructureWithPieceAt(BlockPos,TagKey/HolderSet) delegates to
+    // getStructureWithPieceAt(BlockPos,Predicate) which calls startsForStructure(ChunkPos,Predicate).
+    // That overload hits ServerLevel.getChunk → null from our ServerChunkCacheGetChunkGuardMixin →
+    // Level.getChunk line 400 throws IllegalStateException on the null, crashing the server.
+    @Redirect(
+        method = "getStructureWithPieceAt(Lnet/minecraft/core/BlockPos;Ljava/util/function/Predicate;)Lnet/minecraft/world/level/levelgen/structure/StructureStart;",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/level/StructureManager;startsForStructure(Lnet/minecraft/world/level/ChunkPos;Ljava/util/function/Predicate;)Ljava/util/List;"
+        ),
+        require = 0
+    )
+    private List<StructureStart> voidrp_safeStartsForStructureWithPieceAtPredicate(
+            StructureManager instance, ChunkPos chunkPos, Predicate<Structure> predicate) {
+        try {
+            return instance.startsForStructure(chunkPos, predicate);
+        } catch (Exception e) {
+            if (shouldWarn(chunkPos.x, chunkPos.z)) {
+                VoidRpAsyncAI.LOGGER.warn(
+                    "[VoidRP] StructureManager chunk guard (getStructureWithPieceAt/Tag) — lookup failed at" +
+                    " chunk [{},{}] during decoration ({}), skipping",
+                    chunkPos.x, chunkPos.z, e.getMessage());
             }
             return List.of();
         }
