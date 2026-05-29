@@ -41,7 +41,9 @@
     "FindRespawnChunkGuardMixin",
     "AccessoriesSlotNullGuardMixin",
     "LeafcutterAntForageChunkGuardMixin",
-    "OfflineProfileLookupGuardMixin"
+    "OfflineProfileLookupGuardMixin",
+    "CatSpawnerChunkGuardMixin",
+    "ChunkActivityMapAsyncSaveMixin"
   ],
   "client": [],
   "injectors": {

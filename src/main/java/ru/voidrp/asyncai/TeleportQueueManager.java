@@ -20,8 +20,10 @@ import java.util.*;
  * Поведение:
  *  - При перехвате: немедленно запускает загрузку чанков через ticket и ставит
  *    телепортацию в очередь. Игроку показывается боссбар с прогрессом загрузки.
- *  - Каждый тик: проверяет, загрузился ли целевой чанк.
- *    Как только чанк готов (или через 10 секунд) — выполняет телепортацию.
+ *  - Каждый тик: переподаёт ticket (TicketType.UNKNOWN живёт 1 тик, иначе чанк
+ *    выгружается до окончания генерации) и проверяет, загрузился ли целевой чанк.
+ *    Как только чанк готов — выполняет телепортацию.
+ *  - Таймаут 60 сек: если чанк так и не загрузился — отменяет с сообщением.
  *  - Флаг EXECUTING_QUEUED предотвращает повторный перехват при выполнении очереди.
  */
 public final class TeleportQueueManager {
@@ -29,8 +31,9 @@ public final class TeleportQueueManager {
     /** Устанавливается в true перед выполнением отложенного /tp, чтобы mixin его не перехватил. */
     public static final ThreadLocal<Boolean> EXECUTING_QUEUED = ThreadLocal.withInitial(() -> false);
 
-    private static final int MAX_WAIT_TICKS = 200; // 10 секунд
-    private static final int TICKET_RADIUS  = 3;   // радиус загрузки чанков вокруг цели
+    // 60 секунд — запас для тяжёлой генерации новых чанков в большом паке
+    private static final int MAX_WAIT_TICKS = 1200;
+    private static final int TICKET_RADIUS  = 3;
 
     // Только main-thread — обычный HashMap достаточен
     private static final Map<UUID, PendingTeleport> pending = new HashMap<>();
@@ -55,7 +58,7 @@ public final class TeleportQueueManager {
             this.xRot = xRot;
 
             this.bossBar = new ServerBossEvent(
-                Component.literal("⏳ Прогружаю чанки... 10 сек."),
+                Component.literal("⏳ Прогружаю чанки..."),
                 BossEvent.BossBarColor.YELLOW,
                 BossEvent.BossBarOverlay.PROGRESS
             );
@@ -85,7 +88,12 @@ public final class TeleportQueueManager {
             return false; // чанк уже загружен, телепортируем сразу
         }
 
-        // Запускаем загрузку чанков через ticket-систему (не блокирует main-thread)
+        // Если уже ждём для этого игрока — обновляем цель (повторная команда)
+        if (pending.containsKey(player.getUUID())) {
+            cancelForPlayer(player.getUUID());
+        }
+
+        // Первый тикет — запускаем генерацию чанка
         ChunkPos destChunk = new ChunkPos(cx, cz);
         level.getChunkSource().addRegionTicket(TicketType.UNKNOWN, destChunk, TICKET_RADIUS, destChunk);
 
@@ -124,21 +132,40 @@ public final class TeleportQueueManager {
             int cx = SectionPos.blockToSectionCoord((int) Math.floor(pt.x));
             int cz = SectionPos.blockToSectionCoord((int) Math.floor(pt.z));
 
+            // TicketType.UNKNOWN живёт 1 тик — переподаём каждый тик,
+            // иначе чанк выгружается до окончания генерации.
+            ChunkPos destChunk = new ChunkPos(cx, cz);
+            pt.level.getChunkSource().addRegionTicket(TicketType.UNKNOWN, destChunk, TICKET_RADIUS, destChunk);
+
             boolean chunkLoaded = pt.level.getChunkSource().getChunkNow(cx, cz) != null;
             boolean timeout     = pt.ticksWaiting >= MAX_WAIT_TICKS;
 
-            // Update boss bar progress every tick
-            float progress = (float) pt.ticksWaiting / MAX_WAIT_TICKS;
-            pt.bossBar.setProgress(Math.min(1.0f, progress));
+            // Прогресс: плавно заполняем до 90% по времени, прыгаем на 100% при реальной загрузке
+            float timeProgress = Math.min(0.90f, (float) pt.ticksWaiting / MAX_WAIT_TICKS);
+            pt.bossBar.setProgress(chunkLoaded ? 1.0f : timeProgress);
 
-            // Update boss bar title every second
+            // Обновляем заголовок раз в секунду
             if (pt.ticksWaiting % 20 == 0) {
-                int remaining = Math.max(1, 10 - (pt.ticksWaiting / 20));
-                pt.bossBar.setName(Component.literal("⏳ Прогружаю чанки... " + remaining + " сек."));
+                int elapsed = pt.ticksWaiting / 20;
+                if (chunkLoaded) {
+                    pt.bossBar.setName(Component.literal("✅ Чанки загружены! Телепортирую..."));
+                    pt.bossBar.setColor(BossEvent.BossBarColor.GREEN);
+                } else {
+                    pt.bossBar.setName(Component.literal("⏳ Прогружаю чанки... " + elapsed + " сек."));
+                }
             }
 
-            if (chunkLoaded || timeout) {
+            if (chunkLoaded) {
                 doTeleport(player, pt);
+                toRemove.add(uuid);
+            } else if (timeout) {
+                // Чанк так и не загрузился за 60 сек — отменяем, не телепортируем вслепую
+                VoidRpAsyncAI.LOGGER.warn(
+                    "[VoidRP Teleport] {} — таймаут 60 сек, чанк [{},{}] так и не загрузился",
+                    player.getGameProfile().getName(), cx, cz);
+                player.sendSystemMessage(
+                    Component.literal("§c⚠ Чанк не удалось прогрузить за 60 секунд. Попробуйте повторить команду."));
+                removeBossBar(pt, player);
                 toRemove.add(uuid);
             }
         }
