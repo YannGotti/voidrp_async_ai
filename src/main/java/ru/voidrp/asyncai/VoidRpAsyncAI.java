@@ -70,7 +70,6 @@ public final class VoidRpAsyncAI {
         AsyncPathManager.shutdown();
         ParallelLosManager.shutdown();
         ChunkPreloadManager.shutdown();
-        TeleportQueueManager.shutdown();
         AdaptiveThrottle.reset();
         PlayerSaveWorker.awaitAndShutdown();
         LOGGER.info("[VoidRP Async AI] thread pools shut down");
@@ -83,7 +82,6 @@ public final class VoidRpAsyncAI {
     private static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         UUID id = event.getEntity().getUUID();
         ChunkPreloadManager.onPlayerLeave(id);
-        TeleportQueueManager.onPlayerLeave(id);
     }
 
     private static void onServerTick(ServerTickEvent.Post event) {
@@ -91,7 +89,6 @@ public final class VoidRpAsyncAI {
         tickCounter++;
         if (tickCounter % 20 == 0) ConfigCache.refresh();
         ChunkPreloadManager.onTick(event.getServer());
-        TeleportQueueManager.onTick(event.getServer());
 
         MinecraftServer server = event.getServer();
 
