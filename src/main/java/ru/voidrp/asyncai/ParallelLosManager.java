@@ -45,6 +45,9 @@ public final class ParallelLosManager {
     /** Maximum time (ms) the main thread waits for parallel jobs each tick. */
     private static final long MAX_WAIT_MS = 4L;
 
+    /** Maximum LOS jobs submitted per tick per level to prevent worker overload. */
+    private static final int MAX_JOBS_PER_TICK = 40;
+
     private static volatile ExecutorService pool;
 
     // -------------------------------------------------------------------------
@@ -78,6 +81,7 @@ public final class ParallelLosManager {
 
         long gameTime = level.getGameTime();
         List<CompletableFuture<?>> futures = null; // lazy-init
+        int jobsThisTick = 0;
 
         for (Entity entity : level.getEntities().getAll()) {
             if (!(entity instanceof Mob mob)) continue;
@@ -91,8 +95,8 @@ public final class ParallelLosManager {
             // Already cached and fresh → nothing to do
             if (LineOfSightCache.get(srcId, tgtId, gameTime, distSq) != null) continue;
 
-            // Target in unloaded chunk → cache false immediately, no raycast
-            if (!level.isLoaded(target.blockPosition())) {
+            // Either endpoint in unloaded chunk → cache false immediately, no raycast
+            if (!level.isLoaded(mob.blockPosition()) || !level.isLoaded(target.blockPosition())) {
                 LineOfSightCache.put(srcId, tgtId, false, gameTime);
                 continue;
             }
@@ -103,12 +107,16 @@ public final class ParallelLosManager {
                 continue;
             }
 
+            // Job rate limit: skip remaining pairs this tick to avoid worker overload
+            if (jobsThisTick >= MAX_JOBS_PER_TICK) continue;
+
             // Snapshot volatile position fields before handing off to worker
             final double sx = mob.getX(),    sy = mob.getEyeY(),    sz = mob.getZ();
             final double tx = target.getX(), ty = target.getEyeY(), tz = target.getZ();
             final long   gt = gameTime;
 
             if (futures == null) futures = new ArrayList<>();
+            jobsThisTick++;
 
             futures.add(CompletableFuture.runAsync(() -> {
                 try {

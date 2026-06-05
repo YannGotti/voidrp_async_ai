@@ -1,18 +1,28 @@
 package ru.voidrp.asyncai.mixin;
 
-import net.minecraft.core.BlockPos;
+import it.unimi.dsi.fastutil.longs.LongIterator;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.SectionPos;
+import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import ru.voidrp.asyncai.ChunkWarnRateLimit;
 import ru.voidrp.asyncai.VoidRpAsyncAI;
 
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -30,10 +40,37 @@ import java.util.function.Predicate;
  *   → startsForStructure(ChunkPos,Predicate) → ServerLevel.getChunk → ServerChunkCache.getChunk
  *   → our ServerChunkCacheGetChunkGuardMixin returns null
  *   → Level.getChunk line 400 throws on null → crash
- *   Fix: guard startsForStructure(ChunkPos,Predicate) inside getStructureWithPieceAt(BlockPos,Predicate).
+ *
+ * Root cause #4 (2026-06-02 17:19): NaturalSpawner.spawnForChunk (main thread tick)
+ *   → NaturalSpawner.mobsAt → ChunkGenerator.getMobsAt
+ *   → StructureManager.fillStartsForStructure → LevelReader.getChunk(x,z)
+ *   → ServerChunkCache.getChunk → MainThreadExecutor.managedBlock → LockSupport.parkNanos
+ *   Main thread parks indefinitely waiting for an unloaded structure chunk; Watchdog fires.
+ *
+ * Implementation note on @Shadow removal:
+ *   @Shadow private LevelReader level was replaced with reflection-based field lookup.
+ *   Reason: the Mixin annotation processor was not generating a refmap (confirmed by jar
+ *   inspection — mixins.voidrp_async_ai.refmap.json absent). Without a refmap, @Shadow on
+ *   vanilla (obfuscated) fields fails with "No refMap loaded" at class transformation time,
+ *   causing MixinTransformerError and crashing the server. Reflection finds the first
+ *   LevelReader-typed field by type rather than by name, which is robust to obfuscation.
  */
 @Mixin(StructureManager.class)
 public abstract class StructureManagerChunkGuardMixin {
+
+    // Reflection-based access to StructureManager.level (private LevelReader).
+    // Found by type (not by name) to survive obfuscation and NeoForge remapping without a refmap.
+    private static final Field LEVEL_FIELD;
+    static {
+        Field found = null;
+        for (Field f : StructureManager.class.getDeclaredFields()) {
+            if (LevelReader.class.isAssignableFrom(f.getType())) {
+                try { f.setAccessible(true); found = f; } catch (Exception ignored) {}
+                break;
+            }
+        }
+        LEVEL_FIELD = found;
+    }
 
     private static final ConcurrentHashMap<Long, Long> WARN_TIMESTAMPS = new ConcurrentHashMap<>();
     private static final long WARN_COOLDOWN_MS = 10_000L;
@@ -68,7 +105,6 @@ public abstract class StructureManagerChunkGuardMixin {
         }
     }
 
-    // Root cause #2: 2-arg (BlockPos,Structure) directly calls startsForStructure(SectionPos,Structure)
     @Redirect(
         method = "getStructureWithPieceAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/levelgen/structure/Structure;)Lnet/minecraft/world/level/levelgen/structure/StructureStart;",
         at = @At(
@@ -92,10 +128,6 @@ public abstract class StructureManagerChunkGuardMixin {
         }
     }
 
-    // Root cause #3: getStructureWithPieceAt(BlockPos,TagKey/HolderSet) delegates to
-    // getStructureWithPieceAt(BlockPos,Predicate) which calls startsForStructure(ChunkPos,Predicate).
-    // That overload hits ServerLevel.getChunk → null from our ServerChunkCacheGetChunkGuardMixin →
-    // Level.getChunk line 400 throws IllegalStateException on the null, crashing the server.
     @Redirect(
         method = "getStructureWithPieceAt(Lnet/minecraft/core/BlockPos;Ljava/util/function/Predicate;)Lnet/minecraft/world/level/levelgen/structure/StructureStart;",
         at = @At(
@@ -117,5 +149,52 @@ public abstract class StructureManagerChunkGuardMixin {
             }
             return List.of();
         }
+    }
+
+    // Root cause #4: reimplement fillStartsForStructure using getChunkNow (non-blocking).
+    // Chunks not yet loaded are skipped — structure-mob spawning is simply deferred until the
+    // chunk loads, which is semantically safe.
+    @Inject(
+        method = "fillStartsForStructure",
+        at = @At("HEAD"),
+        cancellable = true,
+        require = 0
+    )
+    private void voidrp_safePopulateFillStartsForStructure(
+            Structure structure, LongSet structureRefs, Consumer<StructureStart> consumer, CallbackInfo ci) {
+        if (LEVEL_FIELD == null) return; // reflection setup failed — fall through to vanilla
+
+        LevelReader levelReader;
+        try {
+            levelReader = (LevelReader) LEVEL_FIELD.get(this);
+        } catch (Exception e) {
+            return;
+        }
+
+        if (!(levelReader instanceof ServerLevel serverLevel)) return;
+
+        ServerChunkCache cache = serverLevel.getChunkSource();
+
+        for (LongIterator it = structureRefs.iterator(); it.hasNext(); ) {
+            long chunkRef = it.nextLong();
+            ChunkPos chunkPos = new ChunkPos(chunkRef);
+            LevelChunk levelChunk = cache.getChunkNow(chunkPos.x, chunkPos.z);
+            if (levelChunk == null) {
+                long suppressed = ChunkWarnRateLimit.acquire(chunkPos.x, chunkPos.z);
+                if (suppressed >= 0) {
+                    VoidRpAsyncAI.LOGGER.warn(
+                        "[VoidRP] StructureManager.fillStartsForStructure guard — chunk [{},{}] not immediately available" +
+                        " — skipping to prevent main-thread chunk-load deadlock{}",
+                        chunkPos.x, chunkPos.z, suppressed > 0 ? " (+" + suppressed + " suppressed)" : "");
+                }
+                continue;
+            }
+            StructureStart start = levelChunk.getStartForStructure(structure);
+            if (start != null && start.isValid()) {
+                consumer.accept(start);
+            }
+        }
+
+        ci.cancel();
     }
 }
